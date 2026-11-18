@@ -254,7 +254,11 @@ namespace INIBinding
                     continue;
                 }
 
-                while(rules_upper_bound > 2 && startsWith(vArray[rules_upper_bound - 1], "!!"))
+                // Trailing !!key[=value] segments are group extras (e.g. !!lazy=true),
+                // but node-matching directives (!!GROUP=, !!GROUPID=, ...) start with "!!"
+                // as well and must be kept as matching rules.
+                while(rules_upper_bound > 2 && startsWith(vArray[rules_upper_bound - 1], "!!") &&
+                      !isProxyGroupMatcherDirective(vArray[rules_upper_bound - 1]))
                 {
                     std::string keyval = vArray[rules_upper_bound - 1].substr(2);
                     auto eqpos = keyval.find('=');
@@ -282,7 +286,7 @@ namespace INIBinding
                         conf.UsingProvider.reserve(conf.UsingProvider.size() + list.size());
                         std::move(list.begin(), list.end(), std::back_inserter(conf.UsingProvider));
                     }
-                    else if(startsWith(vArray[i], "!!"))
+                    else if(startsWith(vArray[i], "!!") && !isProxyGroupMatcherDirective(vArray[i]))
                     {
                         std::string keyval = vArray[i].substr(2);
                         auto eqpos = keyval.find('=');

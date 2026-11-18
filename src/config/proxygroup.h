@@ -65,4 +65,21 @@ struct ProxyGroupConfig
 
 using ProxyGroupConfigs = std::vector<ProxyGroupConfig>;
 
+// The "!!" prefix is shared by two features: node-matching directives handled by
+// applyMatcher() in generator/config/subexport.cpp (e.g. "!!GROUP=tag",
+// "!!GROUPID=0!!(regex)", plus "!!PROVIDER=" consumed during INI parsing) and
+// arbitrary Clash group extras (e.g. "!!lazy=true"). Matching directives must
+// always stay in the rule list, otherwise groups such as `g`select`!!GROUPID=0`
+// would match no nodes. Keep this list in sync with applyMatcher().
+inline bool isProxyGroupMatcherDirective(const String &rule)
+{
+    static const StrArray prefixes = {
+        "!!GROUP=", "!!GROUPID=", "!!INSERT=", "!!TYPE=", "!!PORT=", "!!SERVER=", "!!PROVIDER="
+    };
+    for(const String &prefix : prefixes)
+        if(startsWith(rule, prefix))
+            return true;
+    return false;
+}
+
 #endif // PROXYGROUP_H_INCLUDED
