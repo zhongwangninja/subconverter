@@ -1,6 +1,9 @@
 FROM alpine:3.16 AS builder
 LABEL maintainer="feisan"
 ARG THREADS="4"
+# Optional commit id appended to the version so images built from a branch can be
+# told apart from upstream releases. Empty by default, leaving v0.9.9 untouched.
+ARG SHA=""
 
 WORKDIR /
 RUN set -xe && \
@@ -39,7 +42,8 @@ RUN set -xe && \
 # Copy local source instead of cloning from GitHub
 COPY . /subconverter
 WORKDIR /subconverter
-RUN python3 -m ensurepip && \
+RUN [ -n "$SHA" ] && sed -i 's/\(v[0-9]\.[0-9]\.[0-9]\)/\1-'"$SHA"'/' src/version.h; \
+    python3 -m ensurepip && \
     python3 -m pip install gitpython && \
     python3 scripts/update_rules.py -c scripts/rules_config.conf && \
     cmake -DCMAKE_BUILD_TYPE=Release . && \
