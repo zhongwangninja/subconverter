@@ -1,8 +1,12 @@
-name: Publish Docker Image (0.9.9.fix)
+name: Publish Docker Image (v0.9.9.fix)
 
-# Builds the image from this branch's working tree (Dockerfile.local COPYs the
-# repository) instead of cloning upstream, so the 0.9.9.fix changes are included.
-# Uses the same platform matrix as docker.yml.
+# Personal build for the 0.9.9.fix branch only. It builds the image from this
+# branch's working tree (Dockerfile.local COPYs the repository) instead of
+# cloning upstream, so the branch's changes are included. Uses the same platform
+# matrix as docker.yml.
+#
+# Tags are deliberately distinct from the upstream images: no "latest", and both
+# tags carry the v0.9.9 prefix.
 on:
   push:
     branches: [ 0.9.9.fix ]
@@ -51,9 +55,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           tags: |
-            type=raw,value=0.9.9.fix
-            type=raw,value=latest
-            type=sha,format=short,prefix=v0.9.9-
+            type=raw,value=v0.9.9.fix
+            type=sha,format=short,prefix=v0.9.9.fix-
 
       - name: Docker login
         uses: docker/login-action@v3
@@ -113,9 +116,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           tags: |
-            type=raw,value=0.9.9.fix
-            type=raw,value=latest
-            type=sha,format=short,prefix=v0.9.9-
+            type=raw,value=v0.9.9.fix
+            type=sha,format=short,prefix=v0.9.9.fix-
 
       - name: Docker login
         uses: docker/login-action@v3
