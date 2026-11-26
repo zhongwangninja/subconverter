@@ -82,9 +82,9 @@ proxies:
 '''
 
 
-def convert(base_url, source, node_list):
+def convert(base_url, source, node_list, sort=False):
     query = urlencode({'target': 'clash', 'url': source, 'new_name': 'true',
-                       'list': str(node_list).lower()})
+                       'list': str(node_list).lower(), 'sort': str(sort).lower()})
     with urlopen(f'{base_url.rstrip("/")}/sub?{query}', timeout=15) as response:
         return response.read().decode()
 
@@ -195,6 +195,34 @@ def check_subscription_public_keys(base_url, node_list):
         assert by_name[name] == expected, (name, by_name[name], expected)
 
 
+def check_sorted_yaml_options(base_url, node_list):
+    # Move distinct option maps past one another, including missing options.
+    nodes = []
+    for i in reversed(range(12)):
+        node = {
+            'name': f'sorted-{i:02}', 'type': 'vless', 'server': 'server.example.com',
+            'port': 443, 'uuid': UUID, 'tls': True, 'network': 'xhttp',
+            'servername': SNI, 'client-fingerprint': 'chrome',
+        }
+        if i % 4 != 0:
+            key = base64.urlsafe_b64encode(bytes(range(i + 1, i + 33))).decode().rstrip('=')
+            node['reality-opts'] = {'public-key': key, 'short-id': f'{i:04x}'}
+        if i % 4 != 1:
+            node['xhttp-opts'] = {'path': '/xhttp', 'mode': 'auto'}
+            if i % 4 != 2:
+                node['xhttp-opts']['host'] = f'host-{i}.example.com'
+        nodes.append(node)
+    source = 'data:text/yaml;base64,' + base64.b64encode(yaml.safe_dump({'proxies': nodes}).encode()).decode()
+    output = convert(base_url, source, node_list, sort=True)
+    actual = yaml.safe_load(output)['proxies']
+    assert [n['name'] for n in actual] == sorted(n['name'] for n in nodes)
+    for converted, original in zip(actual, reversed(nodes)):
+        for field in ('reality-opts', 'xhttp-opts'):
+            assert converted.get(field) == original.get(field), (
+                converted['name'], field, converted.get(field), original.get(field))
+    return output
+
+
 def validate_mihomo(executable, output):
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / 'config.yaml'
@@ -220,8 +248,9 @@ def main():
                                                      (False, None, 'abcd'))]
         subscription_output = check_subscription_ids(args.url, node_list)
         check_subscription_public_keys(args.url, node_list)
+        sorted_output = check_sorted_yaml_options(args.url, node_list)
         if args.mihomo:
-            for config in [output, *link_outputs, subscription_output]:
+            for config in [output, *link_outputs, subscription_output, sorted_output]:
                 validate_mihomo(args.mihomo, config)
     print('XHTTP / Reality regression checks passed (full config and node list).')
 

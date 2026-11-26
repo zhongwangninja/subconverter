@@ -1609,11 +1609,11 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                     case "xhttp"_hash: {
                         const YAML::Node options = singleproxy["xhttp-opts"];
                         if (options && options.IsMap()) {
-                            node.ClashXHTTPOptions = cloneClashOptions(options);
+                            node.ClashXHTTPOptions = std::make_shared<const YAML::Node>(cloneClashOptions(options));
                             options["path"] >>= path;
                             options["host"] >>= host;
                         } else {
-                            node.ClashXHTTPOptions.emplace();
+                            node.ClashXHTTPOptions = std::make_shared<const YAML::Node>();
                         }
                         break;
                     }
@@ -1631,9 +1631,10 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 if (reality && reality.IsMap()) {
                     reality["public-key"] >>= pbk;
                     reality["short-id"] >>= sid;
-                    node.ClashRealityOptions = cloneClashOptions(reality);
+                    auto options = cloneClashOptions(reality);
                     // ShortId is exported separately from this node's preserved options.
-                    node.ClashRealityOptions->remove("short-id");
+                    options.remove("short-id");
+                    node.ClashRealityOptions = std::make_shared<const YAML::Node>(options);
                 }
                 singleproxy["flow"] >>= flow;
                 singleproxy["client-fingerprint"] >>= fp;

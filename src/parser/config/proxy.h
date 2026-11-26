@@ -2,6 +2,7 @@
 #define PROXY_H_INCLUDED
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -153,10 +154,11 @@ struct Proxy {
     String Multiplexing;
     tribool V2rayHttpUpgrade;
     StringMap XHTTPOptions;
-    // Preserve the source option maps for Clash/Mihomo YAML exports.
-    // An engaged but null XHTTP map means the source was YAML without xhttp-opts.
-    std::optional<YAML::Node> ClashXHTTPOptions;
-    std::optional<YAML::Node> ClashRealityOptions;
+    // Keep immutable snapshots: assigning a YAML::Node may mutate aliases
+    // held by other Proxy objects when the vector is sorted or compacted.
+    // A pointer to a null XHTTP node represents YAML without xhttp-opts.
+    std::shared_ptr<const YAML::Node> ClashXHTTPOptions;
+    std::shared_ptr<const YAML::Node> ClashRealityOptions;
 };
 
 #define SS_DEFAULT_GROUP "SSProvider"
