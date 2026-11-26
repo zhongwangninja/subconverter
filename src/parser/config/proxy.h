@@ -2,8 +2,10 @@
 #define PROXY_H_INCLUDED
 
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
+#include <yaml-cpp/yaml.h>
 
 #include "utils/tribool.h"
 
@@ -150,6 +152,10 @@ struct Proxy {
     String Multiplexing;
     tribool V2rayHttpUpgrade;
     StringMap XHTTPOptions;
+    // Preserve the source option maps for Clash/Mihomo YAML exports.
+    // An engaged but null XHTTP map means the source was YAML without xhttp-opts.
+    std::optional<YAML::Node> ClashXHTTPOptions;
+    std::optional<YAML::Node> ClashRealityOptions;
 };
 
 #define SS_DEFAULT_GROUP "SSProvider"
