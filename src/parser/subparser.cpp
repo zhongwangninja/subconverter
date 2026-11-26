@@ -1988,10 +1988,16 @@ void explodeStdVless(std::string vless, Proxy &node) {
     }
     if (remarks.empty())
         remarks = add + ":" + port;
-    sni = getUrlArg(addition, "sni");
+    sni = urlDecode(getUrlArg(addition, "sni"));
     vlessConstruct(node, XRAY_DEFAULT_GROUP, remarks, add, port, type, id, aid, net, "auto", flow, mode, path, host, "",
                    tls, pbk, sid, fp, sni, alpnList, packet_encoding, encryption);
-    return;
+    if (tls == "reality") {
+        const auto value = urlDecode(getUrlArg(addition, "support-x25519mlkem768"));
+        if (value == "1" || value == "0")
+            node.RealitySupportX25519MLKEM768 = value == "1";
+        else if (bool enabled; YAML::convert<bool>::decode(YAML::Node(value), enabled))
+            node.RealitySupportX25519MLKEM768 = enabled;
+    }
 }
 
 void explodeShadowrocket(std::string rocket, Proxy &node) {

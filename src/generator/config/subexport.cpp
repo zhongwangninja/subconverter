@@ -660,7 +660,8 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                 if (!scv.is_undef())
                     singleproxy["skip-cert-verify"] = scv.get();
                 if (x.ClashRealityOptions) {
-                    singleproxy["reality-opts"] = *x.ClashRealityOptions;
+                    // Copied proxies can share YAML nodes; export an independent map.
+                    singleproxy["reality-opts"] = YAML::Clone(*x.ClashRealityOptions);
                 } else {
                     if (!x.PublicKey.empty())
                         singleproxy["reality-opts"]["public-key"] = x.PublicKey;
@@ -669,6 +670,8 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                         short_id = x.ShortId;
                         short_id.SetTag(yaml_string_tag);
                     }
+                    if (x.RealitySupportX25519MLKEM768.has_value())
+                        singleproxy["reality-opts"]["support-x25519mlkem768"] = *x.RealitySupportX25519MLKEM768;
                 }
                 if (!x.ServerName.empty())
                     singleproxy["servername"] = x.ServerName;
@@ -728,7 +731,7 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                         singleproxy["network"] = x.TransferProtocol;
                         if (x.ClashXHTTPOptions) {
                             if (x.ClashXHTTPOptions->IsMap())
-                                singleproxy["xhttp-opts"] = *x.ClashXHTTPOptions;
+                                singleproxy["xhttp-opts"] = YAML::Clone(*x.ClashXHTTPOptions);
                         } else {
                             auto options = singleproxy["xhttp-opts"];
                             options["path"] = x.Path;

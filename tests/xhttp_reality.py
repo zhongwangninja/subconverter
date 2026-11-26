@@ -105,16 +105,21 @@ def check_yaml_options(proxies):
     assert proxies[3]['ws-opts']['headers']['Host'] == HOST, proxies[3]
 
 
-def check_link(base_url, node_list, with_host):
-    params = {'type': 'xhttp', 'security': 'reality', 'sni': SNI, 'pbk': PUBLIC_KEY,
-              'sid': '001122', 'fp': 'chrome', 'path': '/xhttp', 'mode': 'auto',
-              'extra': json.dumps({'xPaddingKey': '001', 'noGRPCHeader': False})}
+def check_link(base_url, node_list, with_host, mlkem):
+    uri_sni, uri_sid = 'uri-tls.example.com', '003344'
+    params = {'type': 'xhttp', 'security': 'reality', 'sni': uri_sni, 'pbk': PUBLIC_KEY,
+              'sid': uri_sid, 'fp': 'chrome', 'path': '/xhttp', 'mode': 'auto', 'spx': '/spider',
+              'extra': json.dumps({'xPaddingKey': '001', 'noGRPCHeader': False,
+                                   'xPaddingBytes': '100-1000'}),
+              'x_padding_bytes': '100-1000'}
     if with_host:
         params['host'] = HOST
+    if mlkem is not None:
+        params['support-x25519mlkem768'] = str(mlkem).lower()
     link = f'vless://{UUID}@server.example.com:443?{urlencode(params)}&x-padding-key=%30%30%31#uri'
     output = convert(base_url, link, node_list)
     proxy, = yaml.safe_load(output)['proxies']
-    assert proxy['servername'] == SNI, proxy
+    assert proxy['servername'] == uri_sni, proxy
     options = proxy['xhttp-opts']
     if with_host:
         assert options['host'] == HOST, options
@@ -122,7 +127,12 @@ def check_link(base_url, node_list, with_host):
         assert 'host' not in options, options
     assert options['path'] == '/xhttp' and options['mode'] == 'auto', options
     assert options['x-padding-key'] == '001' and options['no-grpc-header'] is False, options
-    assert proxy['reality-opts'] == {'public-key': PUBLIC_KEY, 'short-id': '001122'}, proxy
+    assert options['x-padding-bytes'] == '100-1000', options
+    reality = {'public-key': PUBLIC_KEY, 'short-id': uri_sid}
+    if mlkem is not None:
+        reality['support-x25519mlkem768'] = mlkem
+        assert proxy['reality-opts']['support-x25519mlkem768'] is mlkem, proxy
+    assert proxy['reality-opts'] == reality, proxy
     return output
 
 
@@ -144,7 +154,8 @@ def main():
     for node_list in (False, True):
         output = convert(args.url, source, node_list)
         check_yaml_options(yaml.safe_load(output)['proxies'])
-        link_outputs = [check_link(args.url, node_list, with_host) for with_host in (True, False)]
+        link_outputs = [check_link(args.url, node_list, with_host, mlkem)
+                        for with_host, mlkem in ((True, True), (True, False), (False, None))]
         if args.mihomo:
             for config in [output, *link_outputs]:
                 validate_mihomo(args.mihomo, config)

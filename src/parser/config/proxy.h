@@ -135,6 +135,7 @@ struct Proxy {
     String GRPCServiceName;
     String GRPCMode;
     String ShortId;
+    std::optional<bool> RealitySupportX25519MLKEM768;
     String Flow;
     String Encryption;
     bool FlowShow = false;
