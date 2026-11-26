@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+inline constexpr char yaml_string_tag[] = "tag:yaml.org,2002:str";
+
 template <typename T> void operator >> (const YAML::Node& node, T& i)
 {
     if(node.IsDefined() && !node.IsNull()) //fail-safe

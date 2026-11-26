@@ -49,6 +49,8 @@ const string_array xhttp_option_keys = {
     "uplink-http-method",
     "session-placement",
     "session-key",
+    "session-table",
+    "session-length",
     "seq-placement",
     "seq-key",
     "uplink-data-placement",
@@ -118,6 +120,37 @@ void readXHTTPExtraOptions(const std::string &addition, Proxy &node) {
         if (isXHTTPOptionKey(key) && !value.empty())
             node.XHTTPOptions[key] = value;
     }
+}
+
+// yaml-cpp does not retain quote style when emitting a Node. Make implicit
+// strings (including quoted keys) explicit so values like "001" stay strings.
+static void preserveYamlStrings(YAML::Node node, std::vector<YAML::Node> &visited) {
+    if (node.IsScalar()) {
+        if (node.Tag() == "!")
+            node.SetTag(yaml_string_tag);
+        return;
+    }
+    if ((!node.IsMap() && !node.IsSequence()) ||
+        std::find(visited.begin(), visited.end(), node) != visited.end())
+        return;
+
+    visited.push_back(node);
+    if (node.IsMap()) {
+        for (const auto &entry : node) {
+            preserveYamlStrings(entry.first, visited);
+            preserveYamlStrings(entry.second, visited);
+        }
+    } else {
+        for (const auto &entry : node)
+            preserveYamlStrings(entry, visited);
+    }
+}
+
+static YAML::Node cloneClashOptions(const YAML::Node &options) {
+    YAML::Node copy = YAML::Clone(options);
+    std::vector<YAML::Node> visited;
+    preserveYamlStrings(copy, visited);
+    return copy;
 }
 
 //remake from speedtestutil
@@ -393,7 +426,7 @@ void vlessConstruct(Proxy &node, const std::string &group, const std::string &re
             node.QUICSecret = path.empty() ? "/" : trim(path);
             break;
         default:
-            node.Host = (host.empty() && !isIPv4(add) && !isIPv6(add)) ? add.data() : trim(host);
+            node.Host = (net != "xhttp" && host.empty() && !isIPv4(add) && !isIPv6(add)) ? add : trim(host);
             node.Path = path.empty() ? "/" : urlDecode(trim(path));
             node.V2rayHttpUpgrade = v2ray_http_upgrade;
             break;
@@ -1530,7 +1563,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 wireguardConstruct(node, group, ps, server, port, ip, ipv6, private_key, public_key, password,
                                    dns_server, mtu, "0", "", "", udp, underlying_proxy);
                 break;
-            case "vless"_hash:
+            case "vless"_hash: {
                 group = XRAY_DEFAULT_GROUP;
                 singleproxy["uuid"] >>= id;
                 singleproxy["alterId"] >>= aid;
@@ -1574,23 +1607,17 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                         singleproxy["h2-opts"]["host"][0] >>= host;
                         edge.clear();
                         break;
-                    case "xhttp"_hash:
-                        path = singleproxy["xhttp-opts"]["path"].IsDefined()
-                                   ? safe_as<std::string>(singleproxy["xhttp-opts"]["path"])
-                                   : "/";
-                        singleproxy["xhttp-opts"]["host"] >>= host;
-                        if (host.empty()) {
-                            singleproxy["xhttp-opts"]["headers"]["Host"] >>= host;
-                        }
-                        singleproxy["xhttp-opts"]["headers"]["Edge"] >>= edge;
-                        if (singleproxy["xhttp-opts"].IsMap()) {
-                            for (const auto &key: xhttp_option_keys) {
-                                if (singleproxy["xhttp-opts"][key].IsScalar()) {
-                                    node.XHTTPOptions[key] = safe_as<std::string>(singleproxy["xhttp-opts"][key]);
-                                }
-                            }
+                    case "xhttp"_hash: {
+                        const YAML::Node options = singleproxy["xhttp-opts"];
+                        if (options && options.IsMap()) {
+                            node.ClashXHTTPOptions = cloneClashOptions(options);
+                            options["path"] >>= path;
+                            options["host"] >>= host;
+                        } else {
+                            node.ClashXHTTPOptions.emplace();
                         }
                         break;
+                    }
                     case "grpc"_hash:
                         singleproxy["servername"] >>= host;
                         singleproxy["grpc-opts"]["grpc-service-name"] >>= path;
@@ -1601,25 +1628,25 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 }
 
                 tls = safe_as<std::string>(singleproxy["tls"]) == "true" ? "tls" : "";
-                if (singleproxy["reality-opts"].IsDefined()) {
-                    host = singleproxy["sni"].IsDefined()
-                               ? safe_as<std::string>(singleproxy["sni"])
-                               : safe_as<std::string>(singleproxy["servername"]);
-                    printf("host:%s", host.c_str());
-                    singleproxy["reality-opts"]["public-key"] >>= pbk;
-                    singleproxy["reality-opts"]["short-id"] >>= sid;
+                const YAML::Node reality = singleproxy["reality-opts"];
+                if (reality && reality.IsMap()) {
+                    reality["public-key"] >>= pbk;
+                    reality["short-id"] >>= sid;
+                    node.ClashRealityOptions = cloneClashOptions(reality);
+                    YAML::Node short_id = (*node.ClashRealityOptions)["short-id"];
+                    if (short_id.IsScalar())
+                        short_id.SetTag(yaml_string_tag);
                 }
                 singleproxy["flow"] >>= flow;
                 singleproxy["client-fingerprint"] >>= fp;
                 singleproxy["alpn"] >>= alpnList;
                 singleproxy["packet-encoding"] >>= packet_encoding;
                 singleproxy["encryption"] >>= encryption;
-                bool vless_udp;
-                singleproxy["udp"] >> vless_udp;
                 vlessConstruct(node, XRAY_DEFAULT_GROUP, ps, server, port, type, id, aid, net, "auto", flow, mode,
                                path, host, "", tls, pbk, sid, fp, sni, alpnList, packet_encoding, encryption, udp,
                                tribool(), tribool(), tribool(), underlying_proxy, v2ray_http_upgrade);
                 break;
+            }
             case "hysteria"_hash:
                 group = HYSTERIA_DEFAULT_GROUP;
                 singleproxy["auth_str"] >> auth;
@@ -1943,8 +1970,7 @@ void explodeStdVless(std::string vless, Proxy &node) {
             path = getUrlArg(addition, "key");
             break;
         case "xhttp"_hash:
-            type = getUrlArg(addition, "headerType");
-            host = getUrlArg(addition, strFind(addition, "sni") ? "sni" : "host");
+            host = urlDecode(getUrlArg(addition, "host"));
             path = getUrlArg(addition, "path");
             readXHTTPExtraOptions(addition, node);
             for (const auto &key: xhttp_option_keys) {
@@ -1953,7 +1979,7 @@ void explodeStdVless(std::string vless, Proxy &node) {
                     value = getUrlArg(addition, replaceAllDistinct(key, "-", "_"));
                 }
                 if (!value.empty()) {
-                    node.XHTTPOptions[key] = value;
+                    node.XHTTPOptions[key] = urlDecode(value);
                 }
             }
             break;
