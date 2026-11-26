@@ -170,6 +170,31 @@ def check_subscription_ids(base_url, node_list):
     return output
 
 
+def check_subscription_public_keys(base_url, node_list):
+    alternate = base64.urlsafe_b64encode(bytes(reversed(range(1, 33)))).decode().rstrip('=')
+    encoded = f'%{ord(PUBLIC_KEY[0]):02X}{PUBLIC_KEY[1:]}'
+    cases = {
+        'first-key': (f'pbk={PUBLIC_KEY}', PUBLIC_KEY),
+        'second-key': (f'pbk={alternate}', alternate),
+        'encoded-key': (f'pbk={encoded}', PUBLIC_KEY),
+        'nested-key': (f'pbk={PUBLIC_KEY}&spx=/search?pbk={alternate}', PUBLIC_KEY),
+        'no-key': (f'spx=/search?pbk={alternate}', None),
+    }
+    links = [f'vless://{UUID}@server.example.com:443?type=tcp&security=reality&sid=001234&{query}#{name}'
+             for name, (query, _) in cases.items()]
+    payload = base64.b64encode('\n'.join(links).encode())
+    source = 'data:text/plain;base64,' + base64.b64encode(payload).decode()
+    output = convert(base_url, source, node_list)
+    proxies = yaml.safe_load(output)['proxies']
+    assert len(proxies) == len(cases), proxies
+    by_name = {proxy['name']: proxy['reality-opts'] for proxy in proxies}
+    for name, (_, key) in cases.items():
+        expected = {'short-id': '001234'}
+        if key is not None:
+            expected['public-key'] = key
+        assert by_name[name] == expected, (name, by_name[name], expected)
+
+
 def validate_mihomo(executable, output):
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / 'config.yaml'
@@ -194,6 +219,7 @@ def main():
                         for with_host, mlkem, sid in ((True, True, '72'), (True, False, '003344'),
                                                      (False, None, 'abcd'))]
         subscription_output = check_subscription_ids(args.url, node_list)
+        check_subscription_public_keys(args.url, node_list)
         if args.mihomo:
             for config in [output, *link_outputs, subscription_output]:
                 validate_mihomo(args.mihomo, config)

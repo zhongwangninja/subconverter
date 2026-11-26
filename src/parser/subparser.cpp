@@ -1943,10 +1943,11 @@ void explodeStdVless(std::string vless, Proxy &node) {
     if (net.empty())
         net = "tcp";
     flow = getUrlArg(addition, "flow");
-    pbk = getUrlArg(addition, "pbk");
-    // Match only a top-level parameter in this link, not a nested ?sid= in another value.
+    // Read Reality values only from top-level parameters in this link.
     for (const auto &parameter : split(addition, "&")) {
-        if (startsWith(parameter, "sid="))
+        if (startsWith(parameter, "pbk="))
+            pbk = urlDecode(parameter.substr(4));
+        else if (startsWith(parameter, "sid="))
             sid = urlDecode(parameter.substr(4));
     }
     encryption = getUrlArg(addition, "encryption");
