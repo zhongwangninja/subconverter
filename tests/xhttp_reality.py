@@ -105,8 +105,8 @@ def check_yaml_options(proxies):
     assert proxies[3]['ws-opts']['headers']['Host'] == HOST, proxies[3]
 
 
-def check_link(base_url, node_list, with_host, mlkem):
-    uri_sni, uri_sid = 'uri-tls.example.com', '003344'
+def check_link(base_url, node_list, with_host, mlkem, uri_sid):
+    uri_sni = 'uri-tls.example.com'
     params = {'type': 'xhttp', 'security': 'reality', 'sni': uri_sni, 'pbk': PUBLIC_KEY,
               'sid': uri_sid, 'fp': 'chrome', 'path': '/xhttp', 'mode': 'auto', 'spx': '/spider',
               'extra': json.dumps({'xPaddingKey': '001', 'noGRPCHeader': False,
@@ -118,6 +118,8 @@ def check_link(base_url, node_list, with_host, mlkem):
         params['support-x25519mlkem768'] = str(mlkem).lower()
     link = f'vless://{UUID}@server.example.com:443?{urlencode(params)}&x-padding-key=%30%30%31#uri'
     output = convert(base_url, link, node_list)
+    assert f'short-id: "{uri_sid}"' in output, output
+    assert '!<tag:yaml.org,2002:str>' not in output, output
     proxy, = yaml.safe_load(output)['proxies']
     assert proxy['servername'] == uri_sni, proxy
     options = proxy['xhttp-opts']
@@ -153,9 +155,12 @@ def main():
     source = 'data:text/yaml;base64,' + base64.b64encode(SOURCE.encode()).decode()
     for node_list in (False, True):
         output = convert(args.url, source, node_list)
+        assert 'short-id: "001234"' in output, output
+        assert '!<tag:yaml.org,2002:str>' not in output, output
         check_yaml_options(yaml.safe_load(output)['proxies'])
-        link_outputs = [check_link(args.url, node_list, with_host, mlkem)
-                        for with_host, mlkem in ((True, True), (True, False), (False, None))]
+        link_outputs = [check_link(args.url, node_list, with_host, mlkem, sid)
+                        for with_host, mlkem, sid in ((True, True, '72'), (True, False, '003344'),
+                                                     (False, None, 'abcd'))]
         if args.mihomo:
             for config in [output, *link_outputs]:
                 validate_mihomo(args.mihomo, config)
