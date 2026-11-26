@@ -67,7 +67,7 @@ proxies:
     client-fingerprint: chrome
     servername: {SNI}
     network: xhttp
-    reality-opts: {{public-key: {PUBLIC_KEY}, short-id: "001122"}}
+    reality-opts: {{public-key: {PUBLIC_KEY}}}
   - name: ws-reality
     type: vless
     server: server.example.com
@@ -78,7 +78,7 @@ proxies:
     servername: {SNI}
     network: ws
     ws-opts: {{path: /ws, headers: {{Host: {HOST}}}}}
-    reality-opts: {{public-key: {PUBLIC_KEY}, short-id: "001122"}}
+    reality-opts: {{public-key: {PUBLIC_KEY}, short-id: ""}}
 '''
 
 
@@ -95,8 +95,10 @@ def check_yaml_options(proxies):
     for actual, original in zip(proxies, expected):
         assert actual['servername'] == SNI, actual
         assert actual.get('xhttp-opts') == original.get('xhttp-opts'), actual
-        assert actual['reality-opts'] == original['reality-opts'], actual
-        assert type(actual['reality-opts']['short-id']) is str, actual
+        reality = original['reality-opts'].copy()
+        if not reality.get('short-id'):
+            reality.pop('short-id', None)
+        assert actual['reality-opts'] == reality, actual
     assert 'xhttp-opts' not in proxies[2], proxies[2]
     assert proxies[0]['reality-opts']['support-x25519mlkem768'] is True
     assert proxies[1]['reality-opts']['support-x25519mlkem768'] is False
@@ -138,6 +140,36 @@ def check_link(base_url, node_list, with_host, mlkem, uri_sid):
     return output
 
 
+def check_subscription_ids(base_url, node_list):
+    # Same server, UUID and public key; only the names and SIDs differ.
+    cases = {
+        'sid-72': ('&sid=72', '72'),
+        'sid-missing': ('', None),
+        'sid-leading-zeros': ('&sid=001234', '001234'),
+        'sid-empty': ('&sid=', None),
+        'sid-hex': ('&sid=ABcdef', 'ABcdef'),
+        'sid-encoded': ('&sid=%30%30%37%32', '0072'),
+        'sid-nested-only': ('&spx=/search?sid=72', None),
+        'sid-with-nested': ('&sid=0099&spx=/search?sid=72', '0099'),
+    }
+    params = urlencode({'type': 'xhttp', 'security': 'reality', 'sni': SNI,
+                        'pbk': PUBLIC_KEY, 'support-x25519mlkem768': 'true'})
+    links = [f'vless://{UUID}@server.example.com:443?{params}{query}#{name}'
+             for name, (query, _) in cases.items()]
+    payload = base64.b64encode('\n'.join(links).encode()).decode()
+    source = 'data:text/plain;base64,' + base64.b64encode(payload.encode()).decode()
+    output = convert(base_url, source, node_list)
+    proxies = yaml.safe_load(output)['proxies']
+    assert len(proxies) == len(cases), proxies
+    by_name = {proxy['name']: proxy['reality-opts'] for proxy in proxies}
+    for name, (_, sid) in cases.items():
+        expected = {'public-key': PUBLIC_KEY, 'support-x25519mlkem768': True}
+        if sid is not None:
+            expected['short-id'] = sid
+        assert by_name[name] == expected, (name, by_name[name], expected)
+    return output
+
+
 def validate_mihomo(executable, output):
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / 'config.yaml'
@@ -161,8 +193,9 @@ def main():
         link_outputs = [check_link(args.url, node_list, with_host, mlkem, sid)
                         for with_host, mlkem, sid in ((True, True, '72'), (True, False, '003344'),
                                                      (False, None, 'abcd'))]
+        subscription_output = check_subscription_ids(args.url, node_list)
         if args.mihomo:
-            for config in [output, *link_outputs]:
+            for config in [output, *link_outputs, subscription_output]:
                 validate_mihomo(args.mihomo, config)
     print('XHTTP / Reality regression checks passed (full config and node list).')
 

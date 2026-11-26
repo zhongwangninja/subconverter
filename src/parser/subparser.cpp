@@ -1326,7 +1326,6 @@ void explodeNetch(std::string netch, Proxy &node) {
 }
 
 void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
-    Node singleproxy;
     uint32_t index = nodes.size();
     const std::string section = yamlnode["proxies"].IsDefined() ? "proxies" : "Proxy";
     for (uint32_t i = 0; i < yamlnode[section].size(); i++) {
@@ -1350,7 +1349,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
         bool reduceRtt, disableSni; //tuic
         std::vector<std::string> alpnList;
         Proxy node;
-        singleproxy = yamlnode[section][i];
+        Node singleproxy = yamlnode[section][i];
         singleproxy["type"] >>= proxytype;
         singleproxy["name"] >>= ps;
         singleproxy["server"] >>= server;
@@ -1633,9 +1632,8 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                     reality["public-key"] >>= pbk;
                     reality["short-id"] >>= sid;
                     node.ClashRealityOptions = cloneClashOptions(reality);
-                    YAML::Node short_id = (*node.ClashRealityOptions)["short-id"];
-                    if (short_id.IsScalar())
-                        short_id.SetTag(yaml_string_tag);
+                    // ShortId is exported separately from this node's preserved options.
+                    node.ClashRealityOptions->remove("short-id");
                 }
                 singleproxy["flow"] >>= flow;
                 singleproxy["client-fingerprint"] >>= fp;
@@ -1946,7 +1944,11 @@ void explodeStdVless(std::string vless, Proxy &node) {
         net = "tcp";
     flow = getUrlArg(addition, "flow");
     pbk = getUrlArg(addition, "pbk");
-    sid = getUrlArg(addition, "sid");
+    // Match only a top-level parameter in this link, not a nested ?sid= in another value.
+    for (const auto &parameter : split(addition, "&")) {
+        if (startsWith(parameter, "sid="))
+            sid = urlDecode(parameter.substr(4));
+    }
     encryption = getUrlArg(addition, "encryption");
     fp = getUrlArg(addition, "fp");
     std::string packet_encoding = getUrlArg(addition, "packet-encoding");

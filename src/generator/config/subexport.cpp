@@ -668,13 +668,13 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                 } else {
                     if (!x.PublicKey.empty())
                         singleproxy["reality-opts"]["public-key"] = x.PublicKey;
-                    if (!x.ShortId.empty()) {
-                        auto short_id = singleproxy["reality-opts"]["short-id"];
-                        short_id = x.ShortId;
-                        short_id.SetTag(yaml_string_tag);
-                    }
                     if (x.RealitySupportX25519MLKEM768.has_value())
                         singleproxy["reality-opts"]["support-x25519mlkem768"] = *x.RealitySupportX25519MLKEM768;
+                }
+                if (!x.ShortId.empty()) {
+                    auto short_id = singleproxy["reality-opts"]["short-id"];
+                    short_id = x.ShortId;
+                    short_id.SetTag(yaml_string_tag);
                 }
                 if (!x.ServerName.empty())
                     singleproxy["servername"] = x.ServerName;
